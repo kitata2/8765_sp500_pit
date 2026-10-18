@@ -67,3 +67,6 @@ target/
 # ipython metadata
 .ipynb_checkpoints
 
+
+# local virtualenv
+.venv/

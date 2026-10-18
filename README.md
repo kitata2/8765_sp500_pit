@@ -1,5 +1,29 @@
 # sp500
 
+## Python package (`sp500_pit`)
+
+Zero-dependency library, CLI and loopback JSON service over the CSV below. Upstream files are untouched so fja05680 merges stay clean.
+
+```bash
+pip install -e .            # add ".[pandas]" for .frame()
+sp500-pit members 2020-03-02 --fmt yahoo
+sp500-pit serve             # http://127.0.0.1:8765, loopback only, reloads when the CSV changes
+```
+
+```python
+import sp500_pit
+m = sp500_pit.connect()     # local CSV, or the service when SP500_PIT_URL is set
+m.members_asof("2020-03-02", fmt="yahoo")   # fmt: raw | yahoo | eodhd
+m.union("2016-09-01", "2026-09-15")         # every symbol that was a member in the window
+m.changes("2020-01-01", "2020-12-31")       # added / removed per change point
+m.intervals("AAL")                          # membership spells, end exclusive
+m.coverage(loaded_symbols, fmt="yahoo")     # share of members with price data, per year
+m.check_range(start, end)                   # stale-tail / pre-1996 caveats
+```
+
+Data lookup order: `SP500_PIT_DATA` (file or folder), this checkout, then the cache filled by `sp500-pit fetch`.
+Limits: tickers are not permanent IDs, pre-2001 history is unverified, and no prices are included.
+
 ##### Current List of S&P 500 companies retrieved from the Wikipedia: `sp500.csv` 
 ##### Historical Lists of S&P 500 components since 1996: `S&P 500 Historical Components & Changes (Updated).csv`
 ##### Example code to retrieve a snapshot of the S&P 500 components on a certain date: `sp500_by_date.ipynb`

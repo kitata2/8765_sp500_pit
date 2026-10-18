@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sp500-pit"
+version = "0.1.0"
+description = "Point-in-time S&P 500 membership: library, CLI and local HTTP service"
+requires-python = ">=3.9"
+dependencies = []
+
+[project.optional-dependencies]
+pandas = ["pandas>=2.0"]
+dev = ["pytest>=8", "pandas>=2.0"]
+
+[project.scripts]
+sp500-pit = "sp500_pit.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

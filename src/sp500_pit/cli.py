@@ -5,6 +5,7 @@ import json
 import sys
 
 from .data import fetch, load
+from .membership import Membership
 from .server import make_server
 from .symbols import FORMATS
 
@@ -14,6 +15,9 @@ def main(argv=None) -> int:
     sub = parser.add_subparsers(dest="cmd", required=True)
     sub.add_parser("info", help="dataset metadata")
     sub.add_parser("check", help="list snapshots with implausible member counts")
+    sub.add_parser("audit", help="structural audit as JSON; exit 1 on ERROR")
+    diff = sub.add_parser("diff", help="historical rows an older CSV and the current one disagree on")
+    diff.add_argument("old_csv")
     sub.add_parser("fetch", help="download the latest CSV into the local cache")
     members = sub.add_parser("members", help="members on a date")
     members.add_argument("date")
@@ -42,6 +46,13 @@ def main(argv=None) -> int:
         elif args.cmd == "check":
             for when, n in m.validate():
                 print(f"{when}: {n} members")
+        elif args.cmd == "audit":
+            report = m.audit()
+            print(json.dumps(report, indent=2))
+            return 1 if report["status"] == "ERROR" else 0
+        elif args.cmd == "diff":
+            for row in Membership.from_csv(args.old_csv).restatements(m):
+                print(f"{row['date']}: +{','.join(row['added'])} -{','.join(row['removed'])}")
         else:
             print("\n".join(m.members_asof(args.date, args.fmt)))
     return 0

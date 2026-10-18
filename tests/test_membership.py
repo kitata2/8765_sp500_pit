@@ -102,3 +102,34 @@ def test_service_matches_local_results(csv_path, m):
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_content_hash_ignores_csv_formatting(tmp_path, m):
+    other = tmp_path / "reordered.csv"
+    other.write_text(CSV.replace('"AAA,BBB,BRK.B"', '"BRK.B,AAA,BBB"'))
+    again = Membership.from_csv(other)
+    assert again.sha256 != m.sha256 and again.content_hash == m.content_hash
+
+
+def test_connect_pin_fails_closed(csv_path, m):
+    import sp500_pit
+
+    assert sp500_pit.connect(path=csv_path, expected_sha256=m.sha256).meta()["sha256"] == m.sha256
+    with pytest.raises(sp500_pit.DatasetMismatch):
+        sp500_pit.connect(path=csv_path, expected_sha256="0" * 64)
+
+
+def test_restatements_report_rewritten_history(tmp_path, m):
+    newer = tmp_path / "newer.csv"
+    newer.write_text(CSV.replace('2020-06-01,"AAA,BRK.B,CCC"', '2020-06-01,"AAA,BRK.B,DDD"'))
+    rows = m.restatements(Membership.from_csv(newer))
+    assert rows[0] == dict(date=date(2020, 6, 1), added=["DDD"], removed=["CCC"])
+    assert m.restatements(m) == []
+
+
+def test_audit_flags_survivorship_and_stale_tail(m):
+    report = m.audit(today=date(2030, 1, 1))
+    by_name = {c["check"]: c["status"] for c in report["checks"]}
+    assert by_name["member_count"] == "ERROR" and by_name["stale_tail"] == "WARN"
+    assert by_name["ticker_reentry"] == "WARN" and by_name["closed_intervals"] == "OK"
+    assert report["status"] == "ERROR" and len(report["audit_hash"]) == 64

@@ -58,6 +58,8 @@ def _route(m: Membership, path: str, q: dict):
         return [[_iso(a), _iso(b)] for a, b in m.intervals(q["ticker"])]
     if path == "/check_range":
         return {"warnings": m.check_range(q["start"], q["end"])}
+    if path == "/audit":
+        return m.audit()
     return None
 
 

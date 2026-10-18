@@ -52,6 +52,9 @@ class RemoteMembership:
     def check_range(self, start, end) -> List[str]:
         return self._get("/check_range", start=parse_date(start), end=parse_date(end))["warnings"]
 
+    def audit(self) -> dict:
+        return self._get("/audit")
+
     def frame(self, fmt: str = "yahoo"):
         import pandas as pd
 

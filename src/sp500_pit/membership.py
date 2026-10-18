@@ -4,6 +4,7 @@ from __future__ import annotations
 import bisect
 import csv
 import hashlib
+import json
 from datetime import date, datetime
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
@@ -11,8 +12,16 @@ from typing import Dict, Iterable, List, Optional, Tuple
 from .symbols import clean, formatter
 
 
+OK, WARN, ERROR = "OK", "WARN", "ERROR"
+MAX_CHURN = 15  # added + removed symbols at one change point before it looks like a data problem
+
+
 class DateOutOfRange(ValueError):
     """Requested date precedes the first snapshot."""
+
+
+class DatasetMismatch(ValueError):
+    """The loaded dataset is not the pinned version."""
 
 
 def parse_date(value: object) -> date:
@@ -43,6 +52,7 @@ class Membership:
         self.source = source
         self.sha256 = sha256
         self._intervals: Optional[Dict[str, List[Tuple[date, Optional[date]]]]] = None
+        self._content_hash: Optional[str] = None
 
     @classmethod
     def from_csv(cls, path) -> "Membership":
@@ -107,18 +117,22 @@ class Membership:
 
     def intervals(self, ticker: str) -> List[Tuple[date, Optional[date]]]:
         """Membership spells as (first snapshot in, first snapshot out or None); end is exclusive."""
+        spells = self._spells()
+        key = clean(ticker)
+        return list(spells.get(key) or spells.get(key.replace("-", ".")) or [])
+
+    def _spells(self) -> Dict[str, List[Tuple[date, Optional[date]]]]:
         if self._intervals is None:
-            spells: Dict[str, List[list]] = {}
+            raw: Dict[str, List[list]] = {}
             previous: frozenset = frozenset()
             for when, members in self._snaps:
                 for t in members - previous:
-                    spells.setdefault(t, []).append([when, None])
+                    raw.setdefault(t, []).append([when, None])
                 for t in previous - members:
-                    spells[t][-1][1] = when
+                    raw[t][-1][1] = when
                 previous = members
-            self._intervals = {t: [(a, b) for a, b in v] for t, v in spells.items()}
-        key = clean(ticker)
-        return list(self._intervals.get(key) or self._intervals.get(key.replace("-", ".")) or [])
+            self._intervals = {t: [(a, b) for a, b in v] for t, v in raw.items()}
+        return self._intervals
 
     def check_range(self, start, end, max_stale_days: int = 120) -> List[str]:
         """Human-readable caveats for using the table over [start, end]."""
@@ -126,6 +140,8 @@ class Membership:
         notes = []
         if s < self.first_date:
             notes.append(f"start {s} precedes first snapshot {self.first_date}")
+        elif s.year < 2001:
+            notes.append("pre-2001 history is unverified (first snapshot has fewer than 494 symbols)")
         if (e - self.last_date).days > max_stale_days:
             notes.append(f"end {e} is {(e - self.last_date).days} days after last snapshot {self.last_date}; "
                          "recent index changes may be missing")
@@ -150,8 +166,63 @@ class Membership:
                                pct=100 * (1 - len(missing) / len(members)) if members else 0.0, missing=missing))
         return report
 
+    @property
+    def content_hash(self) -> str:
+        """Hash of the change points themselves, stable across CSV re-serialisation."""
+        if self._content_hash is None:
+            body = [[d.isoformat(), sorted(m)] for d, m in self._snaps]
+            self._content_hash = hashlib.sha256(json.dumps(body, separators=(",", ":")).encode()).hexdigest()
+        return self._content_hash
+
+    def restatements(self, newer: "Membership") -> List[dict]:
+        """Dates up to this table's last snapshot where `newer` rewrites history."""
+        def at(m: "Membership", d: date) -> frozenset:
+            return m._snaps[m._index(d)][1] if d >= m.first_date else frozenset()
+
+        days = sorted({d for d in self._dates + newer._dates if d <= self.last_date})
+        out = []
+        for d in days:
+            old, new = at(self, d), at(newer, d)
+            if old != new:
+                out.append(dict(date=d, added=sorted(new - old), removed=sorted(old - new)))
+        return out
+
+    def audit(self, today: Optional[date] = None, max_stale_days: int = 120) -> dict:
+        """Structural checks only; they cannot prove the history is complete or correct."""
+        today = today or date.today()
+        checks: List[dict] = []
+
+        def check(name: str, status: str, detail: str = "", **extra) -> None:
+            checks.append(dict(check=name, status=status, detail=detail, **extra))
+
+        sizes = self.validate()
+        hard = [(d.isoformat(), n) for d, n in sizes if n < 400 or n > 600]
+        check("member_count", ERROR if hard else (WARN if sizes else OK),
+              "snapshots outside 480-520 members", count=len(sizes), offenders=[(d.isoformat(), n) for d, n in sizes][:20])
+        churn = [(c["date"].isoformat(), len(c["added"]) + len(c["removed"])) for c in self.changes()
+                 if len(c["added"]) + len(c["removed"]) > MAX_CHURN]
+        check("bulk_churn", WARN if churn else OK, f"change points moving more than {MAX_CHURN} symbols",
+              count=len(churn), offenders=churn[:20])
+        spells = self._spells()
+        reentry = sorted(t for t, s in spells.items() if len(s) > 1)
+        check("ticker_reentry", WARN if reentry else OK,
+              "tickers that left and re-entered; may be different companies", count=len(reentry), offenders=reentry[:20])
+        closed = sum(1 for s in spells.values() if s[-1][1] is not None)
+        long_history = (self.last_date - self.first_date).days > 365
+        check("closed_intervals", ERROR if (closed == 0 and long_history) else OK,
+              "a multi-year universe in which nothing ever exited is survivorship-biased", closed=closed)
+        age = (today - self.last_date).days
+        check("stale_tail", WARN if age > max_stale_days else OK,
+              f"last snapshot {self.last_date} is {age} days old")
+        statuses = {c["status"] for c in checks}
+        report = dict(status=ERROR if ERROR in statuses else (WARN if WARN in statuses else OK),
+                      sha256=self.sha256, content_hash=self.content_hash, checks=checks)
+        report["audit_hash"] = hashlib.sha256(json.dumps(report, sort_keys=True, default=str).encode()).hexdigest()
+        return report
+
     def meta(self) -> dict:
-        return dict(source=self.source, sha256=self.sha256, n_change_points=len(self._snaps),
+        return dict(source=self.source, sha256=self.sha256, content_hash=self.content_hash,
+                    n_change_points=len(self._snaps),
                     first_date=self.first_date.isoformat(), last_date=self.last_date.isoformat(),
                     n_symbols=len({t for _, m in self._snaps for t in m}),
                     caveats="Tickers not permanent IDs; early history unverified; no price data")

@@ -18,8 +18,14 @@ m.union("2016-09-01", "2026-09-15")         # every symbol that was a member in 
 m.changes("2020-01-01", "2020-12-31")       # added / removed per change point
 m.intervals("AAL")                          # membership spells, end exclusive
 m.coverage(loaded_symbols, fmt="yahoo")     # share of members with price data, per year
-m.check_range(start, end)                   # stale-tail / pre-1996 caveats
+m.check_range(start, end)                   # stale-tail / pre-2001 caveats
+m.audit()                                   # OK/WARN/ERROR structural checks + audit_hash
+sp500_pit.connect(expected_sha256="...")    # pin the dataset version; fails closed on mismatch
+old.restatements(new)                       # historical rows a newer CSV rewrote
 ```
+
+`sp500-pit audit` exits 1 on ERROR; `sp500-pit diff OLD.csv` lists restated history against the current file.
+Pin `content_hash` (not the file hash) if you only care about the membership data, not CSV formatting.
 
 Data lookup order: `SP500_PIT_DATA` (file or folder), this checkout, then the cache filled by `sp500-pit fetch`.
 Limits: tickers are not permanent IDs, pre-2001 history is unverified, and no prices are included.

@@ -1,16 +1,37 @@
-"""Loopback-only JSON service over the membership table (stdlib, no dependencies)."""
+"""Loopback-only JSON service over the membership table."""
 from __future__ import annotations
 
 import json
+import os
+import re
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Optional
+from typing import Mapping, Optional
 from urllib.parse import parse_qs, urlparse
+
+from dotenv import dotenv_values
 
 from .data import find_csv
 from .membership import DateOutOfRange, Membership
 from .symbols import FORMATS
+
+DEFAULT_PORT = 8765  # Streamlit apps on the same host use 8501
+
+
+def resolve_port(cwd: Optional[Path] = None, environ: Optional[Mapping[str, str]] = None) -> int:
+    """PORT from the environment or ./.env, else the first 4 digits of the folder name, else 8765."""
+    cwd = Path(cwd) if cwd else Path.cwd()
+    environ = os.environ if environ is None else environ
+    value = environ.get("PORT") or dotenv_values(cwd / ".env").get("PORT")
+    if value:
+        if not value.strip().isdigit() or not 1024 <= int(value) <= 65535:
+            raise ValueError(f"PORT must be an integer in 1024-65535, got {value!r}")
+        return int(value)
+    match = re.search(r"\d{4}", cwd.name)
+    if match and int(match.group()) >= 1024:
+        return int(match.group())
+    return DEFAULT_PORT
 
 
 class _Store:

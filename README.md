@@ -2,13 +2,18 @@
 
 ## Python package (`sp500_pit`)
 
-Zero-dependency library, CLI and loopback JSON service over the CSV below. Upstream files are untouched so fja05680 merges stay clean.
+Library, CLI and JSON service over the CSV below. Upstream files are untouched so fja05680 merges stay clean.
+Managed with [uv](https://docs.astral.sh/uv/).
 
 ```bash
-pip install -e .            # add ".[pandas]" for .frame()
-sp500-pit members 2020-03-02 --fmt yahoo
-sp500-pit serve             # http://127.0.0.1:8765, loopback only, reloads when the CSV changes
+uv sync                                      # .venv from pyproject.toml / uv.lock; add --extra pandas for .frame()
+uv run sp500-pit members 2020-03-02 --fmt yahoo
+uv run sp500-pit serve                       # loopback only, reloads when the CSV changes
+uv run pytest
 ```
+
+The service port is `PORT` (environment or `.env`), else the first 4 digits of the folder name, else 8765; `--port` overrides.
+In another uv project: `uv add --git https://github.com/kitata2/8765_sp500_pit sp500-pit`.
 
 ```python
 import sp500_pit
@@ -24,10 +29,10 @@ sp500_pit.connect(expected_sha256="...")    # pin the dataset version; fails clo
 old.restatements(new)                       # historical rows a newer CSV rewrote
 ```
 
-`sp500-pit audit` exits 1 on ERROR; `sp500-pit diff OLD.csv` lists restated history against the current file.
+`sp500-pit audit` exits 1 on ERROR; `sp500-pit diff OLD.csv` lists restated history against the current file (prefix with `uv run`).
 Pin `content_hash` (not the file hash) if you only care about the membership data, not CSV formatting.
 
-Data lookup order: `SP500_PIT_DATA` (file or folder), this checkout, then the cache filled by `sp500-pit fetch`.
+Data lookup order: `SP500_PIT_DATA` (file or folder), this checkout, then the cache filled by `uv run sp500-pit fetch`.
 Limits: tickers are not permanent IDs, pre-2001 history is unverified, and no prices are included.
 
 ##### Current List of S&P 500 companies retrieved from the Wikipedia: `sp500.csv` 

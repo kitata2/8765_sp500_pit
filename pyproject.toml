@@ -7,10 +7,12 @@ name = "sp500-pit"
 version = "0.1.0"
 description = "Point-in-time S&P 500 membership: library, CLI and local HTTP service"
 requires-python = ">=3.9"
-dependencies = []
+dependencies = ["python-dotenv>=1.0"]
 
 [project.optional-dependencies]
 pandas = ["pandas>=2.0"]
+
+[dependency-groups]
 dev = ["pytest>=8", "pandas>=2.0"]
 
 [project.scripts]

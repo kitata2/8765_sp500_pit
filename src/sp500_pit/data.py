@@ -11,7 +11,7 @@ from .membership import Membership
 
 CSV_NAME = "S&P 500 Historical Components & Changes (Updated).csv"
 ENV_DATA = "SP500_PIT_DATA"
-REMOTE_URL = ("https://raw.githubusercontent.com/kitata2/sp500_pit/master/"
+REMOTE_URL = ("https://raw.githubusercontent.com/kitata2/8765_sp500_pit/master/"
               "S%26P%20500%20Historical%20Components%20%26%20Changes%20(Updated).csv")
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 

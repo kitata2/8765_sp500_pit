@@ -7,7 +7,7 @@ from datetime import date
 import pytest
 
 from sp500_pit import DateOutOfRange, Membership, RemoteMembership
-from sp500_pit.server import make_server
+from sp500_pit.server import make_server, resolve_port
 
 CSV = (
     "date,tickers\n"
@@ -133,3 +133,17 @@ def test_audit_flags_survivorship_and_stale_tail(m):
     assert by_name["member_count"] == "ERROR" and by_name["stale_tail"] == "WARN"
     assert by_name["ticker_reentry"] == "WARN" and by_name["closed_intervals"] == "OK"
     assert report["status"] == "ERROR" and len(report["audit_hash"]) == 64
+
+
+def test_port_comes_from_env_then_dotenv_then_folder_digits_then_default(tmp_path):
+    numbered = tmp_path / "8512_sp500_pit"
+    plain = tmp_path / "sp500_pit"
+    numbered.mkdir()
+    plain.mkdir()
+    assert resolve_port(numbered, {}) == 8512
+    assert resolve_port(plain, {}) == 8765
+    (numbered / ".env").write_text("PORT=9000\n")
+    assert resolve_port(numbered, {}) == 9000
+    assert resolve_port(numbered, {"PORT": "9100"}) == 9100
+    with pytest.raises(ValueError):
+        resolve_port(plain, {"PORT": "80"})

@@ -1,4 +1,4 @@
-# sp500
+# sp500 (fork: 8765_sp500_pit)
 
 ## Python package (`sp500_pit`)
 
@@ -33,7 +33,20 @@ old.restatements(new)                       # historical rows a newer CSV rewrot
 Pin `content_hash` (not the file hash) if you only care about the membership data, not CSV formatting.
 
 Data lookup order: `SP500_PIT_DATA` (file or folder), this checkout, then the cache filled by `uv run sp500-pit fetch`.
-Limits: tickers are not permanent IDs, pre-2001 history is unverified, and no prices are included.
+
+### Service
+
+`uv run sp500-pit serve` serves read-only JSON on loopback: `/members?date=&fmt=`, `/union`, `/change_points`, `/changes`, `/intervals`, `/audit`, `/meta`, `/check_range`, `/health`.
+It has no authentication, so it refuses non-loopback hosts. Other programs set `SP500_PIT_URL=http://127.0.0.1:<port>` and `sp500_pit.connect()` uses it.
+Environment: `SP500_PIT_DATA` (CSV file or folder), `SP500_PIT_URL`, `PORT`.
+
+### Known limits
+
+- Membership is community-curated (Clenow's list to 2019, Wikipedia changes since), not S&P DJI, CRSP or Bloomberg. Pre-2001 history is unverified. `audit()` checks structure only; it currently returns WARN because 52 tickers left and re-entered the index.
+- Identity is by ticker, not PERMNO or FIGI. A rename appears as a removal plus an addition, and a reused ticker can be a different company.
+- No prices. Delisted names need a vendor that carries them. For the 724 symbols that were members between 2016-09 and 2026-09, Yahoo had prices for 80% of the January 2016 members, 86.5% in 2020 and 98.2% in 2026; EODHD had 100%, 99.8% and 100%.
+- No fundamentals, sector history or delisting returns.
+- Do not commit vendor data (Norgate, CRSP, EODHD) here; their licences require deleting it when the subscription ends.
 
 ##### Current List of S&P 500 companies retrieved from the Wikipedia: `sp500.csv` 
 ##### Historical Lists of S&P 500 components since 1996: `S&P 500 Historical Components & Changes (Updated).csv`
